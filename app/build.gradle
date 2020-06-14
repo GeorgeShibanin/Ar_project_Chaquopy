@@ -1,9 +1,9 @@
 apply plugin: 'com.android.application'
 apply plugin: 'com.chaquo.python'
+apply plugin: 'com.google.ar.sceneform.plugin'
 
 android {
     compileSdkVersion 29
-    buildToolsVersion "29.0.3"
 
     defaultConfig {
         applicationId "com.example.chokopie"
@@ -32,6 +32,8 @@ android {
                 install "numpy"
                 install "opencv-python"
                 install "Pillow"
+                install "opencv-contrib-python"
+                install "dict"
 
             }
 
@@ -50,6 +52,11 @@ android {
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
         }
     }
+    compileOptions {
+        sourceCompatibility = 1.8
+        targetCompatibility = 1.8
+    }
+    sourceSets { main { jni.srcDirs = ['src/main/jni', 'src/main/jniLibs/'] } }
 }
 
 dependencies {
@@ -59,4 +66,18 @@ dependencies {
     testImplementation 'junit:junit:4.12'
     androidTestImplementation 'androidx.test.ext:junit:1.1.1'
     androidTestImplementation 'androidx.test.espresso:espresso-core:3.2.0'
+
+    implementation 'com.google.ar.sceneform.ux:sceneform-ux:1.5.0'
+    implementation project(path: ':openCVLibrary347')
 }
+
+
+sceneform.asset('sampledata/dino.fbx',
+        'default',
+        'sampledata/dino.sfa',
+        'src/main/assets/dino')
+
+sceneform.asset('sampledata/lion.fbx',
+        'default',
+        'sampledata/lion.sfa',
+        'src/main/assets/lion')

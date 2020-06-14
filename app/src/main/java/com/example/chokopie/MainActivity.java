@@ -1,35 +1,282 @@
 package com.example.chokopie;
 
-import androidx.appcompat.app.AppCompatActivity;
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
+import android.graphics.ImageFormat;
+import android.graphics.Matrix;
+import android.graphics.Rect;
+import android.graphics.YuvImage;
+import android.media.Image;
+import android.net.Uri;
 import android.os.Bundle;
-
+import android.os.Environment;
+import android.provider.MediaStore;
+import android.util.Log;
 import android.widget.TextView;
+import android.widget.Toast;
+
+import androidx.appcompat.app.AppCompatActivity;
 
 import com.chaquo.python.PyObject;
 import com.chaquo.python.Python;
 import com.chaquo.python.android.AndroidPlatform;
 
+import com.google.ar.core.Anchor;
+import com.google.ar.core.Frame;
+import com.google.ar.core.Plane;
+import com.google.ar.core.TrackingState;
+import com.google.ar.core.exceptions.NotYetAvailableException;
+import com.google.ar.sceneform.AnchorNode;
+import com.google.ar.sceneform.FrameTime;
+import com.google.ar.sceneform.math.Vector3;
+import com.google.ar.sceneform.rendering.Color;
+import com.google.ar.sceneform.rendering.MaterialFactory;
+import com.google.ar.sceneform.rendering.ModelRenderable;
+import com.google.ar.sceneform.rendering.Renderable;
+import com.google.ar.sceneform.rendering.ShapeFactory;
+import com.google.ar.sceneform.ux.ArFragment;
+import com.google.ar.sceneform.ux.TransformableNode;
+
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileNotFoundException;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.nio.ByteBuffer;
+import java.util.Collection;
 
 public class MainActivity extends AppCompatActivity {
 
-    TextView textView;
-
+    ArFragment arFragment;
+    private boolean shouldAddModel = false;
+    //public int[] pixels;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
-        doShit();
+
+        arFragment = (ArFragment) getSupportFragmentManager().findFragmentById(R.id.arFragment);
+
+        arFragment.getArSceneView().getScene().addOnUpdateListener(this::onUpdate);
     }
 
-    public void doShit() {
+
+    private void placeObject(ArFragment arFragment, Anchor anchor, Uri uri) {
+        ModelRenderable.builder()
+                .setSource(arFragment.getContext(), uri)
+                .build()
+                .thenAccept(modelRenderable -> addNodeToScene(arFragment, anchor, modelRenderable))
+                .exceptionally(throwable -> {
+                            Toast.makeText(arFragment.getContext(), "Error:" + throwable.getMessage(), Toast.LENGTH_LONG).show();
+                            return null;
+                        }
+
+                );
+    }
+
+    private void addNodeToScene(ArFragment arFragment, Anchor anchor, Renderable renderable) {
+        AnchorNode anchorNode = new AnchorNode(anchor);
+        TransformableNode node = new TransformableNode(arFragment.getTransformationSystem());
+        node.setRenderable(renderable);
+        node.setParent(anchorNode);
+        arFragment.getArSceneView().getScene().addChild(anchorNode);
+
+    }
+
+
+
+    private void onUpdate(FrameTime frameTime) {
+        if(shouldAddModel) {
+            return;
+        }
+        Frame frame = arFragment.getArSceneView().getArFrame();
+        if (frame == null) {
+            return;
+        }
+        try (Image image = frame.acquireCameraImage()) {
+            if(callScript(image).equals("same")) {
+                image.close();
+                Collection<Plane> planes = frame.getUpdatedTrackables(Plane.class);
+                for (Plane plane : planes) {
+                    if (plane.getTrackingState() == TrackingState.TRACKING) {
+                        Anchor anchor = plane.createAnchor(plane.getCenterPose());
+                        placeObject(arFragment, anchor, Uri.parse("dino.sfb"));
+                        shouldAddModel = true;
+                        break;
+
+                    }
+                }
+            }
+
+        }catch (NotYetAvailableException e) {
+        }
+    }
+
+    public void wriretxt(String result) {
+        TextView textView = findViewById(R.id.text);
+        textView.setText(result);
+    }
+
+    private void makeCube(Anchor anchor) {
+        shouldAddModel = true;
+        MaterialFactory
+                .makeOpaqueWithColor(this, new Color(android.graphics.Color.RED))
+                .thenAccept(material -> {
+                    ModelRenderable cubeRenderable= ShapeFactory.makeCube(new Vector3(0.3f,0.3f,0.3f),
+                            new Vector3(0f, 0.3f, 0f), material);
+                    AnchorNode anchorNode = new AnchorNode(anchor);
+                    anchorNode.setRenderable(cubeRenderable);
+                    arFragment.getArSceneView().getScene().addChild(anchorNode);
+                });
+    }
+
+
+
+    public String callScript(Image image) {
         if (!Python.isStarted())
             Python.start(new AndroidPlatform(this));
         Python python = Python.getInstance();
         PyObject callScript = python.getModule("myscript");
-        PyObject callFunc = callScript.callAttr("func", "photo1.jpg");
-        textView = findViewById(R.id.text);
-        textView.setText(callFunc.toString());
-    }
-}
+        /*byte[] cameraJpeg = extractImageDataFromARCore(image);
+        String cameraFileName = "photo2" + ".jpg";
+        saveImage(cameraJpeg, cameraFileName);
+        //Bitmap bit = getBitmapofImage(image);
+        String baseDir = Environment.getExternalStorageState();
+        String fileName = "photo2.jpg";
+        File f = new File(baseDir+File.separator+fileName);
+        FileInputStream fileInputStream = new FileInputStream(f);
 
+         */
+        PyObject callFunc = callScript.callAttr("func", "photo1.jpg", "photo1.jpg");
+        if(callFunc.toString().equals("1")) {
+            return "same";
+        } else {
+            return "notsame";
+        }
+
+    }
+
+    public Bitmap getBitmapofImage(Image image) {
+        ByteBuffer bufferY = image.getPlanes()[0].getBuffer();
+        ByteBuffer bufferU = image.getPlanes()[1].getBuffer();
+        ByteBuffer bufferV = image.getPlanes()[2].getBuffer();
+
+        byte[] bytes = new byte[bufferY.capacity()+bufferU.capacity()+bufferV.capacity()];
+
+        bufferY.get(bytes,0,bufferY.capacity());
+        bufferU.get(bytes, bufferY.capacity(), bufferU.capacity());
+        bufferV.get(bytes, bufferY.capacity()+bufferU.capacity(), bufferV.capacity());
+
+        ByteArrayOutputStream byteArrayOutputStream = new ByteArrayOutputStream();
+        YuvImage yuvImage = new YuvImage(bytes, ImageFormat.NV21, image.getWidth(), image.getHeight(),null);
+        yuvImage.compressToJpeg(new Rect(0,0,image.getWidth(), image.getHeight()), 100, byteArrayOutputStream);
+
+        byte[] byteForBitmap = byteArrayOutputStream.toByteArray();
+        Bitmap finalBit = BitmapFactory.decodeByteArray(byteForBitmap, 0, byteForBitmap.length);
+        return finalBit;
+
+        //Bitmap bitImage = BitmapFactory.decodeByteArray(bytes, 0, bytes.length, null);
+        //Bitmap bitImage = Bitmap.createBitmap(image.getWidth(), image.getHeight(), null);
+        //int[] pixels = new int[image.getHeight() * image.getWidth()];
+        //bitImage.setPixels(pixels,0, image.getWidth(),0,0, image.getWidth(), image.getHeight());
+
+        //Matrix matrix = new Matrix();
+        //matrix.postRotate(90);
+        //Bitmap finalBitmap = Bitmap.createBitmap(bitImage, 0, 0, image.getWidth(), image.getHeight(), matrix, true);
+    }
+
+   /* private static byte[] convertYUV420888toNV21(Image image) {
+        byte[] nv21;
+        ByteBuffer yBuffer = image.getPlanes()[0].getBuffer();
+        ByteBuffer uBuffer = image.getPlanes()[1].getBuffer();
+        ByteBuffer vBuffer = image.getPlanes()[2].getBuffer();
+
+        int ySize = yBuffer.remaining();
+        int uSize = uBuffer.remaining();
+        int vSize = vBuffer.remaining();
+
+        nv21 = new byte[ySize + uSize + vSize];
+
+        //U and V are swapped
+        yBuffer.get(nv21, 0, ySize);
+        vBuffer.get(nv21, ySize, vSize);
+        uBuffer.get(nv21, ySize + vSize, uSize);
+
+        return nv21;
+    }
+
+    private static byte[] convertNV21toJPEG(byte[] nv21, int width, int height) {
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        YuvImage yuv = new YuvImage(nv21, ImageFormat.NV21, width, height, null);
+        yuv.compressToJpeg(new Rect(0, 0, width, height), 100, out);
+        return out.toByteArray();
+    }
+
+    private static byte[] extractImageDataFromARCore(Image image) {
+        byte[] nv21 = convertYUV420888toNV21(image);
+        byte[] data = convertNV21toJPEG(nv21, image.getWidth(), image.getHeight());
+        return data;
+
+    }
+
+    private int[] decodeGreyscale(byte[] nv21, int width, int height) {
+        int pixelCount = width * height;
+        int[] out = new int[pixelCount];
+        for (int i = 0; i < pixelCount; ++i) {
+            int luminance = nv21[i] & 0xFF;
+            // out[i] = Color.argb(0xFF, luminance, luminance, luminance);
+            out[i] = 0xff000000 | luminance <<16 | luminance <<8 | luminance;//No need to create Color object for each.
+        }
+        return out;
+    }
+
+    private static File generateSaveFile(String fileName) {
+        return new File(Environment.getExternalStorageState(), "/saved_images/" + fileName);
+    }
+
+    private static void saveImage(byte[] data, String fileName) {
+        File file = generateSaveFile(fileName);
+        if (file.exists()) {
+            file.delete();
+        }
+
+        try {
+            FileOutputStream out = new FileOutputStream(file);
+            out.write(data);
+            out.flush();
+            out.close();
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+    }
+    */
+
+
+
+    /*public boolean setupAugmentedImagesDb(Config config, Session session) {
+        AugmentedImageDatabase augmentedImageDatabase;
+        Bitmap bitmap = loadAugmentedImage();
+        if (bitmap == null) {
+            return false;
+        }
+
+        augmentedImageDatabase = new AugmentedImageDatabase(session);
+        augmentedImageDatabase.addImage("model1", bitmap);
+        config.setAugmentedImageDatabase(augmentedImageDatabase);
+        return true;
+    }
+
+    private Bitmap loadAugmentedImage() {
+        try (InputStream is = getAssets().open("pc_photo.jpg")) {
+            return BitmapFactory.decodeStream(is);
+        } catch (IOException e) {
+            Log.e("ImageLoad", "IO Exception", e);
+        }
+
+        return null;
+    }*/
+
+}

@@ -11,9 +11,11 @@ import android.net.Uri;
 import android.os.Bundle;
 import android.os.Environment;
 import android.provider.MediaStore;
+import android.util.Base64;
 import android.util.Log;
 import android.widget.TextView;
 import android.widget.Toast;
+
 
 import androidx.appcompat.app.AppCompatActivity;
 
@@ -37,6 +39,9 @@ import com.google.ar.sceneform.rendering.ShapeFactory;
 import com.google.ar.sceneform.ux.ArFragment;
 import com.google.ar.sceneform.ux.TransformableNode;
 
+import org.opencv.core.Mat;
+import org.opencv.imgcodecs.Imgcodecs;
+
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
@@ -51,7 +56,8 @@ public class MainActivity extends AppCompatActivity {
 
     ArFragment arFragment;
     private boolean shouldAddModel = false;
-    //public int[] pixels;
+    byte[] input_frame;
+    byte[] b;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -96,9 +102,8 @@ public class MainActivity extends AppCompatActivity {
         if (frame == null) {
             return;
         }
-        try (Image image = frame.acquireCameraImage()) {
-            if(callScript(image).equals("same")) {
-                image.close();
+        try {
+            if(callScript(frame.acquireCameraImage()).equals("same")) {
                 Collection<Plane> planes = frame.getUpdatedTrackables(Plane.class);
                 for (Plane plane : planes) {
                     if (plane.getTrackingState() == TrackingState.TRACKING) {
@@ -136,10 +141,7 @@ public class MainActivity extends AppCompatActivity {
 
 
     public String callScript(Image image) {
-        if (!Python.isStarted())
-            Python.start(new AndroidPlatform(this));
-        Python python = Python.getInstance();
-        PyObject callScript = python.getModule("myscript");
+
         /*byte[] cameraJpeg = extractImageDataFromARCore(image);
         String cameraFileName = "photo2" + ".jpg";
         saveImage(cameraJpeg, cameraFileName);
@@ -147,10 +149,34 @@ public class MainActivity extends AppCompatActivity {
         String baseDir = Environment.getExternalStorageState();
         String fileName = "photo2.jpg";
         File f = new File(baseDir+File.separator+fileName);
-        FileInputStream fileInputStream = new FileInputStream(f);
+        try {
+            FileInputStream fileInputStream = new FileInputStream(f);
+        } catch (FileNotFoundException e) {
+            e.printStackTrace();
+        }
+
+        Imgcodecs imgcodecs = new Imgcodecs();
+        Mat img = imgcodecs.imread("photo2.jpg");
 
          */
-        PyObject callFunc = callScript.callAttr("func", "photo1.jpg", "photo1.jpg");
+
+        /*byte[] bitmap = extractImageDataFromARCore(image);
+        Bitmap finalBit = BitmapFactory.decodeByteArray(bitmap, 0, bitmap.length);
+        Bitmap convertedImage = getResizedBitmap(finalBit, 400);
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        convertedImage.compress(Bitmap.CompressFormat.PNG, 100, baos);
+        b = baos.toByteArray();
+        imgStr = Base64.encodeToString(b, android.util.Base64.DEFAULT);
+         */
+
+        if (!Python.isStarted())
+            Python.start(new AndroidPlatform(this));
+
+        Python python = Python.getInstance();
+        PyObject callScript = python.getModule("myscript");
+        PyObject callFunc = callScript.callAttr("func", getBitmapofImage(image), "photo6.jpg");
+        image.close();
+
         if(callFunc.toString().equals("1")) {
             return "same";
         } else {
@@ -159,7 +185,7 @@ public class MainActivity extends AppCompatActivity {
 
     }
 
-    public Bitmap getBitmapofImage(Image image) {
+    public byte[] getBitmapofImage(Image image) {
         ByteBuffer bufferY = image.getPlanes()[0].getBuffer();
         ByteBuffer bufferU = image.getPlanes()[1].getBuffer();
         ByteBuffer bufferV = image.getPlanes()[2].getBuffer();
@@ -170,25 +196,32 @@ public class MainActivity extends AppCompatActivity {
         bufferU.get(bytes, bufferY.capacity(), bufferU.capacity());
         bufferV.get(bytes, bufferY.capacity()+bufferU.capacity(), bufferV.capacity());
 
-        ByteArrayOutputStream byteArrayOutputStream = new ByteArrayOutputStream();
+
         YuvImage yuvImage = new YuvImage(bytes, ImageFormat.NV21, image.getWidth(), image.getHeight(),null);
+        ByteArrayOutputStream byteArrayOutputStream = new ByteArrayOutputStream();
         yuvImage.compressToJpeg(new Rect(0,0,image.getWidth(), image.getHeight()), 100, byteArrayOutputStream);
 
-        byte[] byteForBitmap = byteArrayOutputStream.toByteArray();
-        Bitmap finalBit = BitmapFactory.decodeByteArray(byteForBitmap, 0, byteForBitmap.length);
-        return finalBit;
-
-        //Bitmap bitImage = BitmapFactory.decodeByteArray(bytes, 0, bytes.length, null);
-        //Bitmap bitImage = Bitmap.createBitmap(image.getWidth(), image.getHeight(), null);
-        //int[] pixels = new int[image.getHeight() * image.getWidth()];
-        //bitImage.setPixels(pixels,0, image.getWidth(),0,0, image.getWidth(), image.getHeight());
-
-        //Matrix matrix = new Matrix();
-        //matrix.postRotate(90);
-        //Bitmap finalBitmap = Bitmap.createBitmap(bitImage, 0, 0, image.getWidth(), image.getHeight(), matrix, true);
+        return byteArrayOutputStream.toByteArray();
     }
 
-   /* private static byte[] convertYUV420888toNV21(Image image) {
+
+    public Bitmap getResizedBitmap(Bitmap image, int maxSize) {
+        int width = image.getWidth();
+        int height = image.getHeight();
+
+        float bitmapRatio = (float)width / (float) height;
+        if (bitmapRatio > 1) {
+            width = maxSize;
+            height = (int) (width / bitmapRatio);
+        } else {
+            height = maxSize;
+            width = (int) (height * bitmapRatio);
+        }
+        return Bitmap.createScaledBitmap(image, width, height, true);
+    }
+
+    /*
+    private static byte[] convertYUV420888toNV21(Image image) {
         byte[] nv21;
         ByteBuffer yBuffer = image.getPlanes()[0].getBuffer();
         ByteBuffer uBuffer = image.getPlanes()[1].getBuffer();
@@ -207,6 +240,7 @@ public class MainActivity extends AppCompatActivity {
 
         return nv21;
     }
+
 
     private static byte[] convertNV21toJPEG(byte[] nv21, int width, int height) {
         ByteArrayOutputStream out = new ByteArrayOutputStream();
@@ -233,7 +267,9 @@ public class MainActivity extends AppCompatActivity {
         return out;
     }
 
-    private static File generateSaveFile(String fileName) {
+     */
+
+    /*private static File generateSaveFile(String fileName) {
         return new File(Environment.getExternalStorageState(), "/saved_images/" + fileName);
     }
 
@@ -252,7 +288,9 @@ public class MainActivity extends AppCompatActivity {
             e.printStackTrace();
         }
     }
-    */
+
+     */
+
 
 
 

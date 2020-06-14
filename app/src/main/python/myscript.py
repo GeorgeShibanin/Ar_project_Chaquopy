@@ -1,14 +1,22 @@
 import cv2
 import numpy as np
 from os.path import dirname, join
+import base64
+import io
+import os
+from PIL import Image
 
-def func(imge1, imge2):
-    imge1 = join(dirname(__file__), imge1)
-    imge2 = join(dirname(__file__), imge2)
+def func(input_frame, img2):
+    #img1 = join(dirname(__file__), input_frame)
+    img2 = join(dirname(__file__), img2)
 
+    frame = Image.open(io.BytesIO(bytes(input_frame)))
+    frame = np.array(frame)
 
-    img1 = cv2.imread(imge1, 0)
-    img2 = cv2.imread(imge2, 0)
+    img1 = frame[:, :, ::-1].copy()
+
+    #img1 = cv2.imread(img1, 0)
+    img2 = cv2.imread(img2, 0)
 
     orb = cv2.ORB_create()
     kp_1, desc_1 = orb.detectAndCompute(img1, None)
@@ -26,11 +34,11 @@ def func(imge1, imge2):
 
     number_keypoints = 1
     if len(kp_1) <= len(kp_2):
-        number_keypoints = len(kp_1)
+        number_keypoints = len(kp_1) + 1
     else:
         number_keypoints = len(kp_2)
 
-    if((len(good_points) / number_keypoints * 100) > 1):
+    if((len(good_points) / number_keypoints) * 100 > 0.25):
         return 1
     else:
         return 2

@@ -102,22 +102,22 @@ public class MainActivity extends AppCompatActivity {
         if (frame == null) {
             return;
         }
-        try {
-            if(callScript(frame.acquireCameraImage()).equals("same")) {
-                Collection<Plane> planes = frame.getUpdatedTrackables(Plane.class);
-                for (Plane plane : planes) {
-                    if (plane.getTrackingState() == TrackingState.TRACKING) {
+        Collection<Plane> planes = frame.getUpdatedTrackables(Plane.class);
+        for (Plane plane : planes) {
+            if (plane.getTrackingState() == TrackingState.TRACKING) {
+                try {
+                    if (callScript(frame.acquireCameraImage()).equals("same")) {
                         Anchor anchor = plane.createAnchor(plane.getCenterPose());
                         placeObject(arFragment, anchor, Uri.parse("dino.sfb"));
                         shouldAddModel = true;
                         break;
-
                     }
+                } catch (NotYetAvailableException e) {
+                    e.printStackTrace();
                 }
             }
-
-        }catch (NotYetAvailableException e) {
         }
+
     }
 
     public void wriretxt(String result) {

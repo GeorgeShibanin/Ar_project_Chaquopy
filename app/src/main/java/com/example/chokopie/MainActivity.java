@@ -141,34 +141,6 @@ public class MainActivity extends AppCompatActivity {
 
 
     public String callScript(Image image) {
-
-        /*byte[] cameraJpeg = extractImageDataFromARCore(image);
-        String cameraFileName = "photo2" + ".jpg";
-        saveImage(cameraJpeg, cameraFileName);
-        //Bitmap bit = getBitmapofImage(image);
-        String baseDir = Environment.getExternalStorageState();
-        String fileName = "photo2.jpg";
-        File f = new File(baseDir+File.separator+fileName);
-        try {
-            FileInputStream fileInputStream = new FileInputStream(f);
-        } catch (FileNotFoundException e) {
-            e.printStackTrace();
-        }
-
-        Imgcodecs imgcodecs = new Imgcodecs();
-        Mat img = imgcodecs.imread("photo2.jpg");
-
-         */
-
-        /*byte[] bitmap = extractImageDataFromARCore(image);
-        Bitmap finalBit = BitmapFactory.decodeByteArray(bitmap, 0, bitmap.length);
-        Bitmap convertedImage = getResizedBitmap(finalBit, 400);
-        ByteArrayOutputStream baos = new ByteArrayOutputStream();
-        convertedImage.compress(Bitmap.CompressFormat.PNG, 100, baos);
-        b = baos.toByteArray();
-        imgStr = Base64.encodeToString(b, android.util.Base64.DEFAULT);
-         */
-
         if (!Python.isStarted())
             Python.start(new AndroidPlatform(this));
 
